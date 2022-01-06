@@ -1,6 +1,11 @@
 package test;
 
+import jdk.nashorn.internal.ir.WhileNode;
+import java.math.*;
 import java.io.*;
+import java.text.DecimalFormat;
+import java.text.NumberFormat;
+import java.util.Formatter;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Scanner;
@@ -45,7 +50,7 @@ public class Commands {
 		int anomalyEnd;
 		int anomalylength;
 		List<Anomalies> anomalies = new ArrayList<>();
-		int n=0;
+		int row=0;
 
 		// implement here whatever you need
 		
@@ -109,6 +114,7 @@ public class Commands {
 			dio.write("Please upload your local test CSV file.\n");
 			String line1 = dio.readText();
 			while(!line1.equals("done")){
+				sharedState.row++;
 				testCSV.println(line1);
 				testCSV.flush();
 				line1 = dio.readText();
@@ -174,68 +180,102 @@ public class Commands {
 	}
 
 
-	public class uploadAnomalies extends Command{
+	public class uploadAnomalies extends Command {
 
 		public uploadAnomalies() {
 			super("upload anomalies and analyze results\n");
 		}
+
 		@Override
 		public void execute() {
 			sharedState.anomalies.clear();
-			int P=0;
-			int N = sharedState.anomalyReport.size();
-			for(int i=0;i<sharedState.anomalyReport.size()-1;) {
+			float P = 0;
+			float N = sharedState.row;
+			for (int i = 0; i < sharedState.anomalyReport.size() - 1; i++) {
 				boolean flag = false;
 				sharedState.anomalyStart = (int) sharedState.anomalyReport.get(i).timeStep;
 				sharedState.anomalylength = 1;
-				while (sharedState.anomalyReport.get(i).description.equals(sharedState.anomalyReport.get(i + 1).description) && sharedState.anomalyReport.get(i).timeStep == i) {
+				while (i < sharedState.anomalyReport.size() - 1 && sharedState.anomalyReport.get(i).description.equals(sharedState.anomalyReport.get(i + 1).description)) {
 					sharedState.anomalylength++;
 					i++;
 					flag = true;
 				}
-				sharedState.anomalyEnd = sharedState.anomalyStart + sharedState.anomalylength;
+
+				sharedState.anomalyEnd = sharedState.anomalyStart + sharedState.anomalylength - 1;
 				N -= sharedState.anomalylength;
-				if (!flag)
-					i++;
-				sharedState.anomalies.add(new Anomalies(sharedState.anomalyStart,sharedState.anomalyEnd,sharedState.anomalylength));
+/*				if (!flag)
+					i++;*/
+				sharedState.anomalies.add(new Anomalies(sharedState.anomalyStart, sharedState.anomalyEnd, sharedState.anomalylength));
 			}
-			P =sharedState.anomalies.size();
+			//P = sharedState.anomalies.size();
 
 
-			Scanner userAnomaliesCsv=null;
+			Scanner userAnomaliesCsv = null;
 			dio.write("Please upload your local anomalies file.\n");
 			dio.write("Upload complete.\n");
 
 			List<Anomalies> useranomalies = new ArrayList<>();
 
-			while(true){
+			while (true) {
 
 				String line = dio.readText();
-				if(line.equals("done"))
+				if (line.equals("done"))
 					break;
 				String[] number = line.split(",");
-				int start =Integer.parseInt(number[0]);
-				int end =Integer.parseInt(number[1]);
-				int l = end - start +1;
-				useranomalies.add(new Anomalies(start,end,l));
+				int start = Integer.parseInt(number[0]);
+				int end = Integer.parseInt(number[1]);
+				int l = end - start + 1;
+				useranomalies.add(new Anomalies(start, end, l));
 			}
 
-			float TP=0;
-			float FP=0;
-			float FN=0;
-			float TN=0;
-			for(Anomalies a : sharedState.anomalies) {
-				for (int i = 0; i < useranomalies.size(); i++) {
-					if ((a.start > useranomalies.get(i).end) || (a.end < useranomalies.get(i).start))
-						continue;
-
-					TP++;
-					break;
+			int TP = 0;
+			float FP = 0;
+			int FN = 0;
+			int TN = 0;
+			int counter = 0;
+			for (Anomalies user : useranomalies) {
+				counter = 0;
+				for (Anomalies a : sharedState.anomalies) {
+					if (a.end < user.start )
+						counter++;
+					else if( user.end < a.start )
+						counter++;
 				}
+
+				if (counter == sharedState.anomalies.size()) {
+					FN++;
+				} else
+					TP++;
 			}
 
-			dio.write("True Positive Rate: " + (TP/P)+"\n");
-			dio.write("False Positive Rate: " + (FP/N)+"\n");
+			P=useranomalies.size();
+			for (Anomalies user : sharedState.anomalies) {
+				counter=0;
+				for (Anomalies a : useranomalies) {
+					if (a.end < user.start )
+						counter++;
+					else if( user.end < a.start )
+						counter++;
+				}
+
+				if (counter == useranomalies.size()) {
+					FP++;
+				}
+
+			}
+			NumberFormat df = DecimalFormat.getInstance();
+			df.setMinimumFractionDigits(1);
+			df.setMaximumFractionDigits(3);
+			df.setRoundingMode(RoundingMode.DOWN);
+
+			//df.setRoundingMode(RoundingMode.DOWN);
+			float tpr=TP/P;
+			String TPR = df.format(tpr);
+			float fpn=FP/N;
+			String FPN = df.format(fpn);
+
+			dio.write("True Positive Rate: " +TPR+"\n");
+			dio.write("False Positive Rate: " +FPN+"\n");
 		}
 	}
 
